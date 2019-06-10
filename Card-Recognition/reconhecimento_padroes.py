@@ -2,218 +2,184 @@
 import os
 import numpy as np
 import cv2
-from contornos import preprocess_threshhold
+from contornos import preprocessar_threshhold
 
-WIDTH = 378
-HEIGHT = 534
+LARGURA = 378
+ALTURA = 534
 
-dir_padroes = 'padroes_imagens'
+dir_padroes = './padroes_imagens/'
 
-dir_simbolos = 'simbolos_imagens'
+dir_simbolos = './simbolos_imagens/'
 
-def get_indentificacao_cartas(img, contours):
-    h = np.float32([[0, 0], [WIDTH, 0], [WIDTH, HEIGHT], [0, HEIGHT]])
-    cards = []
-    for (approx, contour) in contours:
-        # transform image to rectangle
-        transform = cv2.getPerspectiveTransform(np.float32(approx), h)
-        warp = cv2.warpPerspective(img, transform, (WIDTH, HEIGHT))
-        thresh = preprocess_threshhold(warp)
-        # rotate when transformation above rotated it
-        thresh = rotate_image_properly(thresh)
+#
+def get_indentificacao_cartas(imagem, bordas):
+    h = np.float32([[0, 0], [LARGURA, 0], [LARGURA, ALTURA], [0, ALTURA]])
+    cartas = []
+    for (approx, borda) in bordas:
+        
+        transformada_perspectiva = cv2.getPerspectiveTransform(np.float32(approx), h)
+        perspectiva_consolidada = cv2.warpPerspective(imagem, transformada_perspectiva, (LARGURA, ALTURA))
+        threshold = preprocessar_threshhold(perspectiva_consolidada)
+        
+        threshold = rotacionar_imagem(threshold)
 
-        # add whtite overlay in left corner in order to get rid  of border in J, Q, K
         y_off = 45
         x_off = 55
         white = (np.ones((100, 100)) * 255)
-        thresh[y_off:y_off+white.shape[0], x_off:x_off+white.shape[1]] = white
+        threshold[y_off:y_off+white.shape[0], x_off:x_off+white.shape[1]] = white
 
-        best_fit = predict_card(thresh)
+        best_fit = classificar_cartas(threshold)
 
-        cards.append((contour, best_fit))
+        cartas.append((borda, best_fit))
 
-    return cards
+    return cartas
 
+#
+def classificar_cartas(thresh):
+    numero_padroes = carregar_padroes_numero(dir_padroes)
+    numero = classificar_valor(thresh, numero_padroes)
+    naipe_padroes = carregar_padroes_naipe(dir_simbolos)
+    naipe = classificar_naipe(thresh, naipe_padroes, numero)
 
-def predict_card(thresh):
-    value_patterns = load_patterns(dir_padroes)
-    value = predict_value(thresh, value_patterns)
-    symbol_patterns = load_patterns(dir_simbolos)
-    symbol = predict_symbol(thresh, symbol_patterns, value)
+    return '{} - {}'.format(numero, naipe)
 
-    return '{} - {}'.format(value, symbol)
-
-
-def load_patterns(dirname):
-    value_patterns = {}
-    # load patterns from pattern directory
-    patterns = os.listdir(dirname)
-    for pattern in patterns:
-        pattern_img = cv2.imread(
-            './'+dirname+'/'+pattern, cv2.IMREAD_GRAYSCALE)
-        thresh = cv2.adaptiveThreshold(pattern_img, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+#
+def carregar_padroes_numero(dirname):
+    padroes_numero = {}
+    padroes = os.listdir(dirname)
+    for padrao in padroes:
+        imagem_padrao = cv2.imread(dirname+padrao, cv2.IMREAD_GRAYSCALE)
+        threshold = cv2.adaptiveThreshold(imagem_padrao, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
                                        cv2.THRESH_BINARY, 15, 2)
 
-        pattern_name = pattern.split('.')[0]
-        if (dirname == dir_padroes):
-            
-            pattern_name = pattern_name.upper()
-            if pattern_name == '0':
-                pattern_name = '10'
+        nome_padrao = padrao.split('.')[0]
+        nome_padrao = nome_padrao.upper()
+        if nome_padrao == '0':
+           nome_padrao = '10'
+        padroes_numero[nome_padrao] = threshold
 
-            # store that value in dictionary
-            value_patterns[pattern_name] = thresh
+    return padroes_numero
 
-        if (dirname == dir_simbolos):
-            value_patterns[pattern_name] = pattern_img
+#
+def carregar_padroes_naipe(dirname):
+    padrao_naipe = {}
+    padroes = os.listdir(dirname)
+    for padrao in padroes:
+        imagem_padrao = cv2.imread(dirname+padrao, cv2.IMREAD_GRAYSCALE)
+        threshold = cv2.adaptiveThreshold(imagem_padrao, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+                                       cv2.THRESH_BINARY, 15, 2)
+        nome_padrao = padrao.split('.')[0]
+        nome_padrao = nome_padrao.upper()
+        padrao_naipe[nome_padrao] = imagem_padrao
 
-    return value_patterns
+    return padrao_naipe
 
 
-def predict_symbol(thresh, symbol_patterns, card_value):
+def classificar_naipe(threshold, padrao_naipe, valor_numero):
 
-    # depends of card, Region Of Interests is in another place - we look for biggest symbol on card
-    if card_value in ['K', 'Q', 'J']:
-        roi = thresh[(HEIGHT-150):(HEIGHT-50), (WIDTH-150):(WIDTH-70)]
-        # flip image - it's upside down
+    if valor_numero in ['K', 'Q', 'J']:
+        roi = threshold[(ALTURA-150):(ALTURA-50), (LARGURA-150):(LARGURA-70)]
         roi = cv2.flip(roi, -1)
-    elif card_value == 'A':
-        roi = thresh[int(HEIGHT/2)-150:int(HEIGHT/2)+150,
-                     int(WIDTH/2)-125:int(WIDTH/2)+125]
-    elif card_value in ['2', '3']:
-        roi = thresh[45:165, 145:245]
+    elif valor_numero == 'A':
+        roi = threshold[int(ALTURA/2)-150:int(ALTURA/2)+150,
+                     int(LARGURA/2)-125:int(LARGURA/2)+125]
+    elif valor_numero in ['2', '3']:
+        roi = threshold[45:165, 145:245]
     else:
-        roi = thresh[45:165, (WIDTH-155):(WIDTH-55)]
+        roi = threshold[45:165, (LARGURA-155):(LARGURA-55)]
         
-
-        # remove noise, add some blur
     roi = cv2.medianBlur(roi, 7)
-    # black on white => white on black
     roi = (255 - roi)
 
-    # find contours
-    contours, _ = cv2.findContours(
+    bordas, _ = cv2.findContours(
         roi, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-    # filter and sort contours
     a = 0.05 * 85*70
-    choosen_contours = sorted(
-        contours, key=lambda c: cv2.contourArea(c), reverse=True)
-    choosen_contours = list(
-        filter(lambda c: cv2.contourArea(c) > a, choosen_contours))
+    bordas_selecionadas = sorted(
+        bordas, key=lambda c: cv2.contourArea(c), reverse=True)
+    bordas_selecionadas = list(
+        filter(lambda c: cv2.contourArea(c) > a, bordas_selecionadas))
 
-    # in case, when no proper contour found
-    if len(choosen_contours) < 1:
+    if len(bordas_selecionadas) < 1:
         return 'undefined'
 
-    # fill found contour
-    cv2.drawContours(roi, [choosen_contours[0]], -
+    cv2.drawContours(roi, [bordas_selecionadas[0]], -
                      1, (255, 255, 255), cv2.FILLED)
 
-    # get bounding rect
-    x, y, w, h = cv2.boundingRect(choosen_contours[0])
-    # get what's inside bounding rect
+    x, y, w, h = cv2.boundingRect(bordas_selecionadas[0])
     sym = roi[y:y+h, x:x+w]
-    # resize it to pattern size
     sym = cv2.resize(sym, (140, 180))
 
-    # choose symbol, that fits best
-    symbol_fit = {}
-    for (key, value) in symbol_patterns.items():
-        symbol_fit[key] = cv2.countNonZero(cv2.absdiff(sym, value))
+    naipe_parecido = {}
+    for (chave, valor) in padrao_naipe.items():
+        naipe_parecido[chave] = cv2.countNonZero(cv2.absdiff(sym, valor))
 
-    # flip sym
     sym = cv2.flip(sym, -1)
 
-    if card_value == 'A':
-        for (key, value) in symbol_patterns.items():
-            old_value = symbol_fit[key]
-            new_value = cv2.countNonZero(cv2.absdiff(sym, value))
-            if new_value < old_value:
-                symbol_fit[key] = new_value
+    if valor_numero == 'A':
+        for (chave, valor) in padrao_naipe.items():
+            valor_antigo = naipe_parecido[chave]
+            novo_valor = cv2.countNonZero(cv2.absdiff(sym, valor))
+            if novo_valor < valor_antigo:
+                naipe_parecido[chave] = novo_valor
 
-    best_fit = min(symbol_fit, key=symbol_fit.get)
-    print(card_value, best_fit, symbol_fit)
-    #cv2.imshow('image', sym)
+    melhor_comparacao = min(naipe_parecido, key=naipe_parecido.get)
+    print(valor_numero, melhor_comparacao, naipe_parecido)
     cv2.waitKey(0)
 
-    return best_fit
+    return melhor_comparacao
 
 
-def predict_value(thresh, value_patterns):
-    # choose left upper corner in order to get cards value
-    left = thresh[15:100, 0:70]
-    # remove noise and add some blur
-    left = cv2.medianBlur(left, 7)
-    # black on white => white on black
-    left = (255-left)
-    # get contour
-    contours, _ = cv2.findContours(
-        left, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    # filter contours, which area is bigger than 2% of whole  area
+def classificar_valor(thresh, value_patterns):  
+    esquerda = thresh[15:100, 0:70]
+    esquerda = cv2.medianBlur(esquerda, 7)  
+    esquerda = (255-esquerda)
+
+    bordas, _ = cv2.findContours(
+        esquerda, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     a = 0.02 * 85*70
-    choosen_contours = list(filter(lambda c: cv2.contourArea(c) > a, contours))
-    choosen_contours = sorted(
-        contours, key=lambda c: cv2.contourArea(c), reverse=True)
-    # when no proper contours find
-    if len(choosen_contours) < 1:
+    bordas_escolhidas = list(filter(lambda c: cv2.contourArea(c) > a, bordas))
+    bordas_escolhidas = sorted(
+        bordas, key=lambda c: cv2.contourArea(c), reverse=True)
+    if len(bordas_escolhidas) < 1:
         return "undefined"
-    # get bounding rect of biggest contour, which is probably our value
-    x, y, w, h = cv2.boundingRect(choosen_contours[0])
-    # get what's inside bounding rect
-    num = left[y:y+h, x:x+w]
-    # resize it to pattern size
+    x, y, w, h = cv2.boundingRect(bordas_escolhidas[0])
+    num = esquerda[y:y+h, x:x+w]
     num = cv2.resize(num, (30, 60))
 
-    # check how "similar" our num is to pattern
     value_fit = {}
     for (key, value) in value_patterns.items():
-        # calculate different pixels and store that difference
         value_fit[key] = cv2.countNonZero(cv2.absdiff(num, value))
 
-    # choose best fit = the smallest difference
     best_fit = min(value_fit, key=value_fit.get)
-
-    # debugging => uncomment to take a look what was found
-    #print(best_fit, value_fit)
-    #cv2.imshow('image', num)
     cv2.waitKey(0)
 
-    # return value we predicted
     return best_fit
 
 
-def rotate_image_properly(thresh):
+def rotacionar_imagem(threshold):
 
-    # check in which corner is the symbol
     AREA1 = 140 * 40
     AREA2 = 65 * 90
-    # left
-    left = thresh[15:155, 0:40]
-    # right - card flipped
-    right = thresh[15:155, 327:367]
-    # left-upper, card id detected horizontal
-    upper_left = thresh[5:70, 15:105]
-    # right-upper, card id detected horizontal
-    upper_right = thresh[10:75, 280:370]
+    esquerda = threshold[15:155, 0:40]
+    direita = threshold[15:155, 327:367]
+    esquerda_superior = threshold[5:70, 15:105]
+    direita_superior = threshold[10:75, 280:370]
 
-    # find card position according to percentage of black pixels in cut out image
-    edges = [cv2.countNonZero(left)/AREA1, cv2.countNonZero(
-        right)/AREA1, cv2.countNonZero(upper_left)/AREA2, cv2.countNonZero(upper_right)/AREA2]
-    index = edges.index(min(edges))
+    bordas = [cv2.countNonZero(esquerda)/AREA1, cv2.countNonZero(
+        direita)/AREA1, cv2.countNonZero(esquerda_superior)/AREA2, cv2.countNonZero(direita_superior)/AREA2]
+    indice = bordas.index(min(bordas))
 
-    # if iamge is rotated, rotate it to desirez orientation
-    if index == 1:
-        thresh = cv2.flip(thresh, +1)
-    elif index == 2:
-        thresh = cv2.transpose(thresh)
-        thresh = cv2.resize(thresh, (0, 0), fx=WIDTH /
-                            HEIGHT, fy=HEIGHT/WIDTH)
-        thresh = cv2.flip(thresh, -1)
-    elif index == 3:
-        thresh = cv2.transpose(thresh)
-        thresh = cv2.resize(thresh, (0, 0), fx=WIDTH /
-                            HEIGHT, fy=HEIGHT/WIDTH)
-        thresh = cv2.flip(thresh, 1)
+    if indice == 1:
+        threshold = cv2.flip(threshold, +1)
+    elif indice == 2:
+        threshold = cv2.transpose(threshold)
+        threshold = cv2.resize(threshold, (0, 0), fx=LARGURA /
+                            ALTURA, fy=ALTURA/LARGURA)
+        threshold = cv2.flip(threshold, -1)
+    elif indice == 3:
+        threshold = cv2.transpose(threshold)
+        threshold = cv2.resize(threshold, (0, 0), fx=LARGURA /
+                            ALTURA, fy=ALTURA/LARGURA)
+        threshold = cv2.flip(threshold, 1)
 
-    return thresh
+    return threshold
