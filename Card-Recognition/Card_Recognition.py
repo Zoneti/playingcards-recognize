@@ -2,7 +2,6 @@
 import numpy as np
 import cv2
 import os
-#from contornos import encontre_contornos_consolidado, realce_da_deteccao
 from reconhecimento_padroes import get_indentificacao_cartas, encontre_contornos_consolidado, realce_da_deteccao
 
 dir_teste_name = './testes/'
