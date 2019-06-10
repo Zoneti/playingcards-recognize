@@ -20,27 +20,27 @@ def preprocessamento_ruido_fundo_com_treshold(imagem, tamanho_treshold):
     return imagem_cinza
 
 
-def preprocess_threshhold_hsv1(img):
-    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-    _, saturation, _ = cv2.split(hsv)
-    thresh = cv2.adaptiveThreshold(saturation, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+def preprocessar_threshhold_hsv1(imagem):
+    escala_cor_hsv = cv2.cvtColor(imagem, cv2.COLOR_RGB2HSV)
+    _, saturacao, _ = cv2.split(escala_cor_hsv)
+    threshold = cv2.adaptiveThreshold(saturacao, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
                                    cv2.THRESH_BINARY, 15, 2)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+    imagem_estruturada = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    threshold = cv2.morphologyEx(threshold, cv2.MORPH_CLOSE, imagem_estruturada)
 
-    return thresh
+    return threshold
 
 
-def preprocess_threshhold_hsv2(img):
-    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-    _, saturation, _ = cv2.split(hsv)
-    grayscale_img = cv2.blur(saturation, (5, 5))
-    thresh = cv2.adaptiveThreshold(grayscale_img, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+def preprocessar_threshhold_hsv2(imagem):
+    escala_cor_hsv = cv2.cvtColor(imagem, cv2.COLOR_RGB2HSV)
+    _, saturação, _ = cv2.split(escala_cor_hsv)
+    imagem_escala_cinza = cv2.blur(saturação, (5, 5))
+    threshold = cv2.adaptiveThreshold(imagem_escala_cinza, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
                                    cv2.THRESH_BINARY, 19, 2)
-    kernel = np.ones((3, 3))
-    thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+    imagem_estruturada = np.ones((3, 3))
+    threshold = cv2.morphologyEx(threshold, cv2.MORPH_CLOSE, imagem_estruturada)
 
-    return thresh
+    return threshold
 
 #
 def preprocessar_threshhold(imagem):
@@ -65,8 +65,8 @@ def encontre_contornos_consolidado(img):
         imshape, preprocessamento_ruido_fundo_com_treshold(img, 15)))
     bordas.append(encontrar_bordas(
         imshape, preprocessamento_ruido_fundo_com_treshold(img, 11)))
-    bordas.append(encontrar_bordas(imshape, preprocess_threshhold_hsv1(img)))
-    bordas.append(encontrar_bordas(imshape, preprocess_threshhold_hsv2(img)))
+    bordas.append(encontrar_bordas(imshape, preprocessar_threshhold_hsv1(img)))
+    bordas.append(encontrar_bordas(imshape, preprocessar_threshhold_hsv2(img)))
     bordas.append(encontrar_bordas(imshape, preprocessar_threshhold(img)))
 
     bordas_filtradas = remover_bordas_duplicadas(bordas, imshape)
