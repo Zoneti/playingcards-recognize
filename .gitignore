@@ -2,4 +2,8 @@
 __pycache__/
 *.sln
 *.pyproj
-*/.vs
+*/.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
