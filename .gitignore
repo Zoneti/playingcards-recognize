@@ -7,3 +7,5 @@ __pycache__/
 *.user
 *.userosscache
 *.sln.docstates
+testes/
+imagens_processadas/

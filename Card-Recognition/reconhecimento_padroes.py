@@ -11,7 +11,7 @@ dir_padroes = 'padroes_imagens'
 
 dir_simbolos = 'simbolos_imagens'
 
-def get_cards_from_image(img, contours):
+def get_indentificacao_cartas(img, contours):
     h = np.float32([[0, 0], [WIDTH, 0], [WIDTH, HEIGHT], [0, HEIGHT]])
     cards = []
     for (approx, contour) in contours:
